@@ -1,0 +1,59 @@
+import random
+
+class Conversa:
+    def __init__(self):
+        self.topicos = []
+        self.respostas = []
+        self.memoria = {}
+        self.tokenizer = self.tokenize
+
+    def tokenize(self, entrada):
+        tokens = entrada.split()
+        return tokens
+
+    def responder(self, entrada):
+        tokens = self.tokenize(entrada)
+        for token in tokens:
+            if token in self.topicos:
+                return random.choice(self.respostas)
+            elif token in self.memoria:
+                return self.memoria[token]
+        return "Não entendi"
+
+    def aprender(self, entrada, resposta):
+        tokens = self.tokenize(entrada)
+        self.topicos.extend(tokens)
+        self.respostas.append(resposta)
+        self.memoria[entrada] = resposta
+
+    def salvar_memoria(self):
+        with open("memoria.pkl", "wb") as f:
+            import pickle
+            pickle.dump(self.memoria, f)
+
+    def carregar_memoria(self):
+        try:
+            with open("memoria.pkl", "rb") as f:
+                import pickle
+                self.memoria = pickle.load(f)
+        except FileNotFoundError:
+            pass
+
+if __name__ == "__main__":
+    conversa = Conversa()
+    conversa.carregar_memoria()
+
+    while True:
+        entrada = input("Você: ")
+        resposta = conversa.responder(entrada)
+        print("Conversa: ", resposta)
+        aprender = input("Aprender? (s/n): ")
+        if aprender.lower() == "s":
+            resposta_aprender = input("Resposta: ")
+            conversa.aprender(entrada, resposta_aprender)
+        salvar = input("Salvar memoria? (s/n): ")
+        if salvar.lower() == "s":
+            conversa.salvar_memoria()
+
+
+memoria.pkl (arquivo vazio)

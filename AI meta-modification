@@ -1,4 +1,38 @@
-import random
+
+# requirements.txt
+flask
+nltk
+textblob
+sklearn
+pandas
+numpy
+pickle
+docker
+
+# estrutura do projeto
+conversa/
+(link unavailable)
+models/
+(link unavailable)
+__(link unavailable)
+requirements.txt
+(link unavailable)
+
+
+Modelo de Conversa
+
+
+# models/(link unavailable)
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from textblob import TextBlob
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.preprocessing import LabelEncoder
+import pickle
 
 class Conversa:
     def __init__(self):
@@ -6,19 +40,23 @@ class Conversa:
         self.respostas = []
         self.memoria = {}
         self.tokenizer = self.tokenize
+        self.emocoes = {}
+        self.vectorizer = TfidfVectorizer()
+        self.classificador = MultinomialNB()
+        self.le = LabelEncoder()
 
     def tokenize(self, entrada):
-        tokens = entrada.split()
+        entrada = entrada.lower()
+        tokens = word_tokenize(entrada)
+        stopwords_pt = set(stopwords.words('portuguese'))
+        tokens = [t for t in tokens if t not in stopwords_pt]
         return tokens
 
     def responder(self, entrada):
         tokens = self.tokenize(entrada)
-        for token in tokens:
-            if token in self.topicos:
-                return random.choice(self.respostas)
-            elif token in self.memoria:
-                return self.memoria[token]
-        return "Não entendi"
+        entrada_vec = self.vectorizer.transform([' '.join(tokens)])
+        predicao = self.classificador.predict(entrada_vec)
+        return self.respostas[int(predicao)]
 
     def aprender(self, entrada, resposta):
         tokens = self.tokenize(entrada)
@@ -26,34 +64,95 @@ class Conversa:
         self.respostas.append(resposta)
         self.memoria[entrada] = resposta
 
+    def reconhecer_emocao(self, entrada):
+        entrada = ' '.join(self.tokenize(entrada))
+        blob = TextBlob(entrada)
+        emocao = blob.sentiment.polarity
+        if emocao > 0.5:
+            return "Positiva"
+        elif emocao < -0.5:
+            return "Negativa"
+        else:
+            return "Neutra"
+
     def salvar_memoria(self):
         with open("memoria.pkl", "wb") as f:
-            import pickle
             pickle.dump(self.memoria, f)
 
     def carregar_memoria(self):
         try:
             with open("memoria.pkl", "rb") as f:
-                import pickle
                 self.memoria = pickle.load(f)
         except FileNotFoundError:
             pass
 
-if __name__ == "__main__":
-    conversa = Conversa()
-    conversa.carregar_memoria()
-
-    while True:
-        entrada = input("Você: ")
-        resposta = conversa.responder(entrada)
-        print("Conversa: ", resposta)
-        aprender = input("Aprender? (s/n): ")
-        if aprender.lower() == "s":
-            resposta_aprender = input("Resposta: ")
-            conversa.aprender(entrada, resposta_aprender)
-        salvar = input("Salvar memoria? (s/n): ")
-        if salvar.lower() == "s":
-            conversa.salvar_memoria()
+    def treinar(self):
+        df = pd.DataFrame(list(self.memoria.items()), columns=['entrada', 'resposta'])
+        X = df['entrada']
+        y = df['resposta']
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+        X_train_vec = self.vectorizer.fit_transform(X_train)
+        self.classificador.fit(X_train_vec, y_train)
+Aplicação Flask
 
 
-memoria.pkl (arquivo vazio)
+# (link unavailable)
+from flask import Flask, request, jsonify
+from models.conversa import Conversa
+
+app = Flask(__name__)
+
+conversa = Conversa()
+conversa.carregar_memoria()
+
+@app.route('/conversa', methods=['POST'])
+def conversar():
+    entrada = request.json['entrada']
+    emocao = conversa.reconhecer_emocao(entrada)
+    resposta = conversa.responder(entrada)
+    return jsonify({'resposta': resposta, 'emocao': emocao})
+
+@app.route('/aprender', methods=['POST'])
+def aprender():
+    entrada = request.json['entrada']
+    resposta = request.json['resposta']
+    conversa.aprender(entrada, resposta)
+    conversa.treinar()
+    return jsonify({'sucesso': True})
+
+@app.route('/salvar', methods=['POST'])
+def salvar():
+    conversa.salvar_memoria()
+    return jsonify({'sucesso': True})
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+Dockerfile
+
+
+# Dockerfile
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+RUN pip install -r requirements.txt
+
+COPY . .
+
+CMD ["flask", "run", "--host=0.0.0.0"]
+
+Configuração do Docker-Compose
+
+
+# docker-compose.yml
+version: '3'
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
